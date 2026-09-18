@@ -1,0 +1,13 @@
+{
+  "name": "mindy",
+  "owner": {
+    "name": "Mike"
+  },
+  "description": "The public Mindy marketplace.",
+  "plugins": [
+    {
+      "name": "mindy",
+      "source": "./plugins/mindy"
+    }
+  ]
+}
