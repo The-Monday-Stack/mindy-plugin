@@ -97,4 +97,4 @@ install="$tmp/install.out"
 "$bun" "$engine/delivery-cli.ts" --release-signature "$release/release-signature.json" --release-package "$archive" --operation-id "mindy-setup-$(date +%s)-$$" --action "$action" --client-root "$client_root" >"$install" 2>&1 || stop 'Mindy could not be set up on this machine. Ask Mike.'
 
 finished=true
-printf '%s\n' "Mindy is now in $client_root" 'Type /MYSETUP next.'
+printf '%s\n' "Mindy is now in $client_root"
