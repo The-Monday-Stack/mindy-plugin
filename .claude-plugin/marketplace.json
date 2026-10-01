@@ -3,7 +3,7 @@
   "owner": {
     "name": "Mike"
   },
-  "description": "The public Mindy marketplace.",
+  "description": "The public MINDY marketplace.",
   "plugins": [
     {
       "name": "mindy",
