@@ -1,10 +1,22 @@
 #!/bin/sh
 set -eu
 
-# How a member starts MINDY, in every message below that says so. This is the Claude Code form. It is
-# written here and nowhere else in this script, so a different form is one edit. The /mindy skill
-# repeats the no-code message, and a test holds the two the same.
-start_mindy='type /mindy'
+# How a member starts MINDY, in every message below that says so: /mindy in Claude Code, and @mindy in
+# the ChatGPT app, where MINDY members use Codex. Both forms are written here and nowhere else in this
+# script, so a different form is one edit. The /mindy skill repeats the no-code message in both forms,
+# and a test holds them the same.
+#
+# Claude Code marks the commands it runs with CLAUDECODE. The ChatGPT app starts Codex with
+# CODEX_INTERNAL_ORIGINATOR_OVERRIDE (the app's name for itself) and CODEX_CLI_PATH (its own copy of
+# codex), and Codex marks the commands it runs with CODEX_THREAD_ID, or CODEX_SANDBOX and
+# CODEX_SANDBOX_NETWORK_DISABLED when it runs them in its sandbox. Members use Codex only in the
+# ChatGPT app, so any of the Codex marks means the app.
+start_mindy_in_claude_code='type /mindy'
+start_mindy_in_the_chatgpt_app='type @mindy'
+start_mindy=$start_mindy_in_claude_code
+if [ -z "${CLAUDECODE:-}" ] && [ -n "${CODEX_INTERNAL_ORIGINATOR_OVERRIDE:-}${CODEX_CLI_PATH:-}${CODEX_THREAD_ID:-}${CODEX_SANDBOX:-}${CODEX_SANDBOX_NETWORK_DISABLED:-}" ]; then
+	start_mindy=$start_mindy_in_the_chatgpt_app
+fi
 start_mindy_capital="$(printf '%s' "$start_mindy" | cut -c 1 | tr '[:lower:]' '[:upper:]')$(printf '%s' "$start_mindy" | cut -c 2-)"
 
 # The decided wording (2 October 2026). The member sees exactly one of these when setup stops, and no
@@ -251,11 +263,11 @@ json_line() {
 	printf '%s' "$1" | tr '\n' ' ' | json_text "$2"
 }
 
-# Which app is running setup: Claude Code marks the commands it runs with CLAUDECODE, and Codex with
-# CODEX_THREAD_ID, or CODEX_SANDBOX when it runs them in its sandbox.
+# Which app is running setup, by the same marks as start_mindy at the top: Claude Code, or Codex, which
+# for a member is Codex in the ChatGPT app. The download server reads "Codex" for both.
 app_name() {
 	if [ -n "${CLAUDECODE:-}" ]; then printf '%s\n' 'Claude Code'
-	elif [ -n "${CODEX_THREAD_ID:-}${CODEX_SANDBOX:-}${CODEX_SANDBOX_NETWORK_DISABLED:-}" ]; then printf '%s\n' 'Codex'
+	elif [ -n "${CODEX_INTERNAL_ORIGINATOR_OVERRIDE:-}${CODEX_CLI_PATH:-}${CODEX_THREAD_ID:-}${CODEX_SANDBOX:-}${CODEX_SANDBOX_NETWORK_DISABLED:-}" ]; then printf '%s\n' 'Codex'
 	else printf '%s\n' 'not known'; fi
 }
 
@@ -595,6 +607,20 @@ if [ -n "$active_version" ]; then action=update; fi
 # An update keeps the harnesses recorded when MINDY was installed, because the enrol step refuses
 # to change them once a release is active.
 begin 'checking for Claude Code and Codex'
+# The ChatGPT app keeps its codex inside the app and names it in CODEX_CLI_PATH. When no codex is on
+# PATH, that one is put at the end of PATH, for this script and the engine it runs, which runs
+# `codex --version` for each harness it registers. It is used only as a whole path, with no ":" that
+# would split it into two PATH entries, to an executable file named codex.
+app_codex=${CODEX_CLI_PATH:-}
+case "$app_codex" in
+	*:*) app_codex= ;;
+	/*/codex) ;;
+	*) app_codex= ;;
+esac
+if ! command -v codex >/dev/null 2>&1 && [ -n "$app_codex" ] && [ -f "$app_codex" ] && [ -x "$app_codex" ]; then
+	PATH="$PATH:${app_codex%/codex}"
+	export PATH
+fi
 if [ "$action" = update ]; then
 	recorded=$(sed -n 's/.*"harnessIds"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' "$client_root/.mindy/update-verifier.json" 2>/dev/null | head -n 1)
 	case "$recorded" in *'"claude-code"'*) harness_list='claude-code' ;; esac
