@@ -34,6 +34,21 @@ details_sent_ending="MINDY has already been sent the details. $start_mindy_capit
 details_not_taken_ending="MINDY's download server couldn't take the details just now. $start_mindy_capital with your access code to try again."
 interrupted_message="Setup stopped because it was interrupted. $start_mindy_capital with your access code to start again."
 
+# The <reason> in "Setup stopped while saving your access code on this Mac: <reason>." for each case
+# the engine names when saving the code stops (mindy-install/delivery-credential-cli.ts,
+# AccessCodeStopCase). The engine's own code and detail go only to the stop note and the stop report.
+# A case not listed here, and an engine from before the cases, gets reason_kept below instead.
+# access_code_reason <case>
+access_code_reason() {
+	case "$1" in
+		keychain-out-of-reach-and-file-not-written) printf '%s\n' "this Mac's password store did not take your code, and the private file for your code could not be written either" ;;
+		saved-code-file-not-private) printf '%s\n' "the file that holds your code on this Mac is not private to your Mac account, so setup will not use it" ;;
+		saved-code-unreadable) printf '%s\n' "the access code already saved on this Mac could not be read back" ;;
+		setup-record-not-written) printf '%s\n' "setup could not write its record of your code in your MINDY folder" ;;
+		setup-record-unreadable) printf '%s\n' "setup could not read its record of your code in your MINDY folder" ;;
+	esac
+}
+
 # The code comes on standard input, first line, after --code-on-stdin, so it is not in this script's
 # arguments for the process list to show. --code <code> still works, for a skill written before that.
 code=
@@ -112,6 +127,7 @@ step='starting setup'
 stop_message=
 stop_reason=
 member_reason=
+withhold_reason=false
 stop_status=
 stop_file=
 stop_stamp=
@@ -366,7 +382,7 @@ tell() {
 	esac
 	shown_reason=${member_reason:-$stop_reason}
 	reason_withheld=false
-	if must_not_show "$shown_reason"; then reason_withheld=true; shown_reason=$reason_kept; fi
+	if [ "$withhold_reason" = true ] || must_not_show "$shown_reason"; then reason_withheld=true; shown_reason=$reason_kept; fi
 	stop_time
 	if keep_stop "$1"; then note_kept=true; else note_kept=false; fi
 	if [ "$note_kept" = false ] && [ "$reason_withheld" = true ]; then shown_reason=$reason_not_shown; fi
@@ -703,13 +719,26 @@ if chmod 700 "$bun" 2>"$tmp/chmod.err"; then :; else chmod_status=$?; stop "$(re
 engine="$release/components/mindy-engine/mindy-install"
 begin 'saving your access code on this Mac'
 enrol="$tmp/enrol.out"
-if "$bun" "$engine/delivery-credential-cli.ts" bootstrap-with-code --membership-code "$code" --client-root "$client_root" "$@" >"$enrol" 2>&1; then :; else
-	enrol_status=$?
+# The code reaches the engine on standard input, written by printf, which is part of this shell, so no
+# program's arguments hold it and the Mac's list of running programs never shows it. An engine from
+# before 3 October 2026 reads the code only as an argument, so one of those is still given it that way.
+if grep -q -e '--membership-code-on-stdin' "$engine/delivery-credential-cli.ts" 2>/dev/null; then
+	if printf '%s\n' "$code" | "$bun" "$engine/delivery-credential-cli.ts" bootstrap-with-code --membership-code-on-stdin --client-root "$client_root" "$@" >"$enrol" 2>&1; then enrol_status=0; else enrol_status=$?; fi
+else
+	if "$bun" "$engine/delivery-credential-cli.ts" bootstrap-with-code --membership-code "$code" --client-root "$client_root" "$@" >"$enrol" 2>&1; then enrol_status=0; else enrol_status=$?; fi
+fi
+if [ "$enrol_status" != 0 ]; then
 	message=$(sed -n '1p' "$enrol")
 	# The engine's own sentences, matched exactly. Release 1.0.6 has the older different-code sentence.
 	stop_for_gate_sentence "$enrol" "$enrol_status"
 	if [ "$message" = "$engine_different_code_sentence" ] || [ "$message" = "$engine_different_code_sentence_before" ]; then stop_saying "$different_code_message" "$message" "$enrol_status"; fi
-	stop "$(reason_of "$enrol")" "$enrol_status"
+	# The engine's stop names its case, which becomes the plain reason. Its own code, such as
+	# CREDENTIAL_PLACEMENT_FAILED, and its detail stay in the stop note and the stop report.
+	enrol_reason=$(reason_of "$enrol")
+	enrol_case=$(printf '%s\n' "$enrol_reason" | sed -n 's/.*"case"[[:space:]]*:[[:space:]]*"\([a-z-]*\)".*/\1/p' | head -n 1)
+	member_reason=$(access_code_reason "$enrol_case")
+	case "$enrol_reason" in '{'*) [ -n "$member_reason" ] || withhold_reason=true ;; esac
+	stop "$enrol_reason" "$enrol_status"
 fi
 
 begin 'installing MINDY'
