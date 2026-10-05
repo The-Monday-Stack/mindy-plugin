@@ -8,6 +8,10 @@
     {
       "name": "mindy",
       "source": "./plugins/mindy"
+    },
+    {
+      "name": "timesaver",
+      "source": "./plugins/timesaver"
     }
   ]
 }

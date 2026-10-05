@@ -1,0 +1,9 @@
+{
+  "name": "timesaver",
+  "version": "1.0.0",
+  "description": "Install Mindy TimeSaver with your access code.",
+  "author": {
+    "name": "Mindy TimeSaver"
+  },
+  "displayName": "Mindy TimeSaver"
+}
