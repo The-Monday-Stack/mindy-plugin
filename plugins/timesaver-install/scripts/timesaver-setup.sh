@@ -1,39 +1,68 @@
 #!/bin/sh
 set -eu
 
-start='type /timesaver'
-app_name='Claude Code'
-if [ -z "${CLAUDECODE:-}" ] && [ -n "${CODEX_INTERNAL_ORIGINATOR_OVERRIDE:-}${CODEX_CLI_PATH:-}${CODEX_THREAD_ID:-}${CODEX_SANDBOX:-}" ]; then app_name='Codex'; fi
+start='type /timesaver-install'
 capital="$(printf '%s' "$start" | cut -c 1 | tr '[:lower:]' '[:upper:]')$(printf '%s' "$start" | cut -c 2-)"
 no_code="This needs your Mindy TimeSaver access code, which came in the message with your install steps. $capital, a space and your code, all on one line."
 not_issued="This is not a Mindy TimeSaver access code, so setup can't use it. Copy the code again in full from the message it came in, then $start with it."
 not_active="This Mindy TimeSaver access code is no longer active, so it can't download Mindy TimeSaver."
 different="This Mac already has a different Mindy TimeSaver access code saved, and Mindy TimeSaver uses one code per Mac. $capital with that earlier code."
-unsigned="This download is not a signed Mindy TimeSaver release, so setup stopped before installing anything, to keep your Mac safe. Check you're on your usual internet connection, then $start with your access code again."
+unsigned="The release check did not pass, so setup has not installed this download. $capital with your access code to try again."
 too_many="Too many tries from this internet connection in the last minute, so Mindy TimeSaver's download server is pausing for a moment. Wait a minute, then $start with your access code again."
 unreachable="Setup could not reach Mindy TimeSaver's download server. Check you are online, then $start with your access code again."
 interrupted="Setup stopped because it was interrupted. $capital with your access code to start again."
-generic="Setup stopped before Mindy TimeSaver was installed. $capital with your access code to try again."
+generic="This step did not finish. $capital with your access code to try again."
 
-print_how_it_works() {
- printf '%s\n' "Mindy TimeSaver (MTS) is ready. It works in whatever folder you open $app_name in, and everything goes into one memory. Start a session with /mindyload, and type /mindyend when you finish to save it. Nothing will be saved to your MTS unless you type /mindyend at the end of a session. Each day, when you start a session, your MTS compresses the previous day's sessions into a summary. This also happens every week for days, every month for weeks, quarter for months and year for quarters."
- printf '%s\n' ""
- printf '%s\n' "To turn your TimeSaver off completely type /timesaver-off to stop saving and /timesaver-on to start again."
- printf '%s\n' ""
- printf '%s\n' "Don't forget - nothing at all will be saved to Mindy TimeSaver unless you type /mindyend at the end of a session!"
+print_welcome() {
+ printf '%s\n' "Mindy TimeSaver (MTS) is ready. It works in whatever folder you open the app in, and everything goes into one memory. Start a session with /mindyload, and type /mindyend when you finish to save it. Nothing will be saved to your MTS unless you type /mindyend at the end of a session."
 }
 
 show_help() {
- print_how_it_works
- printf '%s\n' "Use /timesaver-reports-off to stop bug reports and /timesaver-reports-on to allow them again."
+ printf '%s\n' "Type /mindyend at the end of a session to save it."
+ printf '%s\n' "Use /mindyload to give your AI all the context it needs for any work you've saved."
+ printf '%s\n' "Use /mindysearch to search for anything in your MTS."
+ printf '%s\n' "Use /mindyteam to send a bug report, give feedback or ask a question."
+ printf '%s\n' "Use /mindyhelp for a reminder of these instructions."
 }
+read_content_root() {
+ content_root="$HOME/timesaver"
+ location_bun=${1:-$HOME/.timesaver/bin/bun}
+ if [ -x "$location_bun" ] && [ -d "$HOME/.timesaver" ]; then
+  content_root=$(cd "$HOME/.timesaver" && "$location_bun" -e '
+   const root = process.argv[1];
+   let path = ["install-state.json", "kept-saves.json"].map(name => root + "/" + name).find(path => require("node:fs").existsSync(path));
+   if (!path && require("node:fs").existsSync(root + "/install-transaction.json")) {
+    const tx = await Bun.file(root + "/install-transaction.json").json();
+    const state = tx.changed?.find(item => item.destination === root + "/install-state.json");
+    if (state?.backup?.startsWith(root + "/install-state.json.previous-") && !state.backup.slice(root.length + 1).includes("/")) path = state.backup;
+   }
+   const state = path ? await Bun.file(path).json() : {};
+   process.stdout.write(typeof state.contentRoot === "string" ? state.contentRoot : process.env.HOME + "/timesaver-install");
+  ' "$HOME/.timesaver")
+ fi
+}
+if [ "${1:-}" = "--setup-stage" ]; then
+ if [ -f "$HOME/.timesaver/setup-progress.json" ] && [ -x "$HOME/.timesaver/bin/bun" ]; then
+  (cd "$HOME/.timesaver" && "$HOME/.timesaver/bin/bun" -e 'process.stdout.write((await Bun.file(process.argv[1]).json()).stage)' "$HOME/.timesaver/setup-progress.json")
+ fi
+ exit 0
+fi
+if [ "${1:-}" = "--setup-complete" ]; then rm -f "$HOME/.timesaver/setup-progress.json"; exit 0; fi
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "help" ]; then show_help; exit 0; fi
+if [ "${1:-}" = "--folder-info" ]; then
+ read_content_root
+ printf '%s\n' "Your saves folder is $content_root. Mindy TimeSaver works with Claude or ChatGPT, with other AIs coming soon. They all read the same memories and build the same context, so you are not locked in to one company. This folder is yours, not any company's. You can move it anywhere, at any time, by asking me."
+ exit 0
+fi
 code=
+account_plugin=false
+for argument in "$@"; do [ "$argument" != "--account-plugin" ] || account_plugin=true; done
 if [ "${1:-}" = "--code-on-stdin" ]; then code=$(sed -n '1p' | tr -d ' \t\r') || code=; fi
 if [ "$code" = "help" ]; then show_help; exit 0; fi
 # An unfinished setup retains its transaction until app registration succeeds.
 if [ -z "$code" ] && [ -f "$HOME/.timesaver/install-state.json" ] && [ ! -f "$HOME/.timesaver/install-transaction.json" ]; then
- printf '%s\n' "Mindy TimeSaver is already installed in $HOME/timesaver."
+ read_content_root
+ printf '%s\n' "Mindy TimeSaver is already installed in $content_root."
  show_help
  exit 0
 fi
@@ -43,8 +72,8 @@ tmp=
 finished=false
 step='starting Mindy TimeSaver setup'
 cleanup() { [ -z "$tmp" ] || rm -rf "$tmp"; }
-on_signal() { trap - HUP INT TERM; finished=true; step='Mindy TimeSaver setup was interrupted'; report_stop "$interrupted" || :; cleanup; printf '%s\n' "$interrupted"; exit 1; }
-on_exit() { status=$?; if [ "$status" != 0 ] && [ "$finished" = false ]; then report_stop "$generic" || :; fi; cleanup; if [ "$status" != 0 ] && [ "$finished" = false ]; then printf '%s\n' "$generic"; fi; }
+on_signal() { trap - HUP INT TERM; finished=true; reason="Setup stopped while $step. $interrupted"; report_stop "$reason" || :; cleanup; printf '%s\n' "$reason"; exit 1; }
+on_exit() { status=$?; if [ "$status" != 0 ] && [ "$finished" = false ]; then report_stop "Setup stopped while $step. $generic" || :; fi; cleanup; if [ "$status" != 0 ] && [ "$finished" = false ]; then printf '%s\n' "Setup stopped while $step. $generic"; fi; }
 trap on_signal HUP INT TERM
 trap on_exit EXIT
 
@@ -73,16 +102,22 @@ report_stop() {
 	if printf '%s' "$report" | gate_curl -sS --connect-timeout 5 --max-time 10 -H 'Content-Type: application/json' --data-binary @- 'https://gate.mindy.build/mts/setup-stops' >/dev/null 2>&1; then :; fi
 	return 0
 }
-fail_as() { finished=true; report_stop "$1" || :; printf '%s\n' "$1"; exit 1; }
+fail_as() { finished=true; reason="Setup stopped while $step. $1"; report_stop "$reason" || :; printf '%s\n' "$reason"; exit 1; }
 tmp=$(mktemp -d) || fail_as "$generic"
 plugin_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P) || fail_as "$generic"
 home=${HOME:-}
 [ -n "$home" ] || fail_as "$generic"
-content_root="$home/timesaver"
+step='checking this computer can run Mindy TimeSaver'
+[ "$(uname -s)" = Darwin ] || fail_as 'Setup needs to run on your Mac. Click the </> button, choose Local and run /timesaver-install there.'
+step='finding your saves folder'
+read_content_root || fail_as "$generic"
+if [ -x "$home/.timesaver/bin/bun" ] && [ ! -f "$home/.timesaver/install-transaction.json" ] && { [ -f "$home/.timesaver/install-state.json" ] || [ -f "$home/.timesaver/kept-saves.json" ]; }; then
+ [ -d "$content_root" ] || fail_as "Mindy TimeSaver cannot reach your saves folder at $content_root. Reconnect its disk or cloud folder, then try again. Your existing saves have not been changed."
+fi
 state_root="$home/.timesaver"
 
 packument="$tmp/packument.json"
-step='asking Mindy TimeSaver download server for the latest release'
+step="asking Mindy TimeSaver's download server for the latest release"
 if status=$(gate_curl -sS -H 'Accept: application/json' -o "$packument" -w '%{http_code}' 'https://gate.mindy.build/mts' 2>/dev/null); then :; else fail_as "$unreachable"; fi
 case "$status" in
 	200) ;;
@@ -91,6 +126,7 @@ case "$status" in
 	000) fail_as "$unreachable" ;;
 	*) fail_as "$generic" ;;
 esac
+step='checking the latest release details'
 grep -q '"name"[[:space:]]*:[[:space:]]*"mts"' "$packument" || fail_as "$unsigned"
 tags=$(sed -n 's/.*"dist-tags"[[:space:]]*:[[:space:]]*{\([^}]*\)}.*/\1/p' "$packument" | head -n 1)
 version=$(printf '%s\n' "$tags" | sed -n 's/.*"latest"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
@@ -102,7 +138,8 @@ case "$integrity" in sha512-*) ;; *) fail_as "$unsigned" ;; esac
 archive="$tmp/mts.tgz"
 step='downloading the Mindy TimeSaver release'
 if status=$(gate_curl -sS -o "$archive" -w '%{http_code}' "https://gate.mindy.build/mts/-/mts-$version.tgz" 2>/dev/null); then :; else fail_as "$unreachable"; fi
-[ "$status" = 200 ] || fail_as "$unreachable"
+[ "$status" = 200 ] || fail_as "The download server did not send the release (response $status). Try setup again."
+step='checking the downloaded file matches the release'
 actual=$(shasum -a 512 "$archive" 2>/dev/null | sed 's/[[:space:]].*$//')
 expected=$(printf '%s\n' "${integrity#sha512-}" | openssl base64 -d -A 2>/dev/null | od -An -tx1 | tr -d ' \n')
 [ -n "$actual" ] && [ "$actual" = "$expected" ] || fail_as "$unsigned"
@@ -137,6 +174,7 @@ mkdir -p "$tmp/unpacked"
 tar -xzf "$archive" -C "$tmp/unpacked" 2>/dev/null || fail_as "$unsigned"
 release="$tmp/unpacked/package/release"
 
+step='finding the runtime for this Mac'
 machine=$(uname -m)
 case "$machine" in arm64) arch=arm64 ;; x86_64) arch=x64 ;; *) fail_as "$generic" ;; esac
 manifest="$release/release-manifest.json"
@@ -144,6 +182,7 @@ runtime_tail=$(sed -n 's/.*"componentId":"mts-bun-runtime"\(.*\)/\1/p' "$manifes
 runtime_entry=$(printf '%s\n' "$runtime_tail" | sed -n "s|.*\({[^{}]*\"path\":\"mts-install/sealed-parts/bun/darwin-$arch/bun\"[^{}]*}\).*|\1|p" | head -n 1)
 bun_digest=$(printf '%s\n' "$runtime_entry" | sed -n 's/.*"fileDigest":"\(sha256:[^"]*\)".*/\1/p')
 bun="$release/components/mts-bun-runtime/mts-install/sealed-parts/bun/darwin-$arch/bun"
+[ -f "$bun" ] || fail_as 'This release has no runtime for this Mac.'
 [ -f "$bun" ] && [ "sha256:$(shasum -a 256 "$bun" | sed 's/[[:space:]].*$//')" = "$bun_digest" ] || fail_as "$unsigned"
 chmod 700 "$bun" || fail_as "$generic"
 
@@ -163,6 +202,12 @@ lock_digest=$(printf '%s\n' "$lock_entry" | sed -n 's/.*"fileDigest":"\(sha256:[
 lock_module="$release/components/mts-engine/MY-MIND/MY-SYSTEM/utilities/mts-file-lock.ts"
 [ -f "$lock_module" ] && [ "sha256:$(shasum -a 256 "$lock_module" | sed 's/[[:space:]].*$//')" = "$lock_digest" ] || fail_as "$unsigned"
 
+step='finding your saves folder'
+read_content_root "$bun" || fail_as "$generic"
+if [ ! -f "$state_root/install-transaction.json" ] && { [ -f "$state_root/install-state.json" ] || [ -f "$state_root/kept-saves.json" ]; }; then
+ [ -d "$content_root" ] || fail_as "Mindy TimeSaver cannot reach your saves folder at $content_root. Reconnect its disk or cloud folder, then try again. Your existing saves have not been changed."
+fi
+step='checking the files inside the release'
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --verify-only) >/dev/null 2>&1 || fail_as "$unsigned"
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --rollback-if-present) >/dev/null 2>&1 || fail_as "$generic"
 save_code="$release/components/mts-engine/mts-install/runtime/save-access-code.ts"
@@ -179,9 +224,9 @@ had_previous=false
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --prepare) >"$install_result" 2>/dev/null || fail_as "$generic"
 
 marketplace="$state_root/plugin-marketplace"
-installed_marketplace_name='mindy-memory'
-installed_plugin_reference='timesaver@mindy-memory'
-registered=false
+installed_marketplace_name='mindy'
+installed_plugin_reference='timesaver@mindy'
+registered=$account_plugin
 step='making Mindy TimeSaver available in your apps'
 claude_present=false
 codex_present=false
@@ -235,37 +280,85 @@ remove_old_registration() {
 	fi
 }
 
+claude_added=false
+codex_added=false
+has_public_plugin() {
+ "$1" plugin list --json >"$tmp/plugins-$1.json" 2>/dev/null || return 1
+ (cd "$release" && "$bun" -e '
+  const [app, path] = process.argv.slice(1), listing = await Bun.file(path).json();
+  const entries = app === "claude" ? listing : listing.installed;
+  const prior = Array.isArray(entries) && entries.find(entry => ["timesaver@mindy-memory", "timesaver@timesaver-marketplace"].includes(entry.id ?? entry.pluginId));
+  await Bun.write(path + ".restore", prior ? prior.id ?? prior.pluginId : "");
+  process.exit(Array.isArray(entries) && entries.some(entry => (["timesaver@mindy", ...(app === "claude" ? ["timesaver@synced"] : [])].includes(entry.id ?? entry.pluginId)) && (() => { const [major, minor] = String(entry.version ?? "0.0.0").split(".").map(Number); return major > 1 || major === 1 && minor >= 1; })()) ? 0 : 1);
+ ' "$1" "$tmp/plugins-$1.json") >/dev/null 2>&1
+}
+ensure_public_marketplace() {
+ "$1" plugin marketplace list --json >"$tmp/public-marketplaces-$1.json" 2>/dev/null || return 1
+ if (cd "$release" && "$bun" -e '
+  const [app, path] = process.argv.slice(1), listing = await Bun.file(path).json();
+  const entries = app === "claude" ? listing : listing.marketplaces;
+  process.exit(Array.isArray(entries) && entries.some(entry => entry.name === "mindy") ? 0 : 1);
+ ' "$1" "$tmp/public-marketplaces-$1.json") >/dev/null 2>&1; then
+  if [ "$1" = claude ]; then claude plugin marketplace update mindy >/dev/null 2>&1
+  elif (cd "$release" && "$bun" -e 'const value = await Bun.file(process.argv[1]).json(); process.exit(value.marketplaces.find(row => row.name === "mindy")?.marketplaceSource?.sourceType === "git" ? 0 : 1);' "$tmp/public-marketplaces-codex.json"); then codex plugin marketplace upgrade mindy --json >/dev/null 2>&1
+  else return 0; fi
+  return $?
+ fi
+ if [ "$1" = claude ]; then claude plugin marketplace add The-Monday-Stack/mindy-plugin --scope user >/dev/null 2>&1
+ else codex plugin marketplace add https://github.com/The-Monday-Stack/mindy-plugin.git --json >/dev/null 2>&1; fi
+}
+remove_private_copy() {
+ if [ "$claude_present" = true ]; then
+  if claude plugin list --json >"$tmp/legacy-claude.json" 2>/dev/null && (cd "$release" && "$bun" -e 'const rows = await Bun.file(process.argv[1]).json(); process.exit(rows.some(row => row.id === "timesaver@mindy-memory") ? 0 : 1);' "$tmp/legacy-claude.json"); then
+   claude plugin uninstall timesaver@mindy-memory --scope user >/dev/null 2>&1 || return 1
+  fi
+  claude plugin marketplace remove mindy-memory --scope user >/dev/null 2>&1 || :
+ fi
+ if [ "$codex_present" = true ]; then
+  if codex plugin list --json >"$tmp/legacy-codex.json" 2>/dev/null && (cd "$release" && "$bun" -e 'const value = await Bun.file(process.argv[1]).json(); process.exit(value.installed.some(row => row.pluginId === "timesaver@mindy-memory") ? 0 : 1);' "$tmp/legacy-codex.json"); then
+   codex plugin remove timesaver@mindy-memory --json >/dev/null 2>&1 || return 1
+  fi
+  codex plugin marketplace remove mindy-memory --json >/dev/null 2>&1 || :
+ fi
+}
 rollback_registration() {
-	if [ "$claude_present" = true ]; then
-		claude plugin uninstall "$installed_plugin_reference" --scope user >/dev/null 2>&1 || :
-		claude plugin marketplace remove "$installed_marketplace_name" --scope user >/dev/null 2>&1 || :
-	fi
-	if [ "$codex_present" = true ]; then
-		codex plugin remove "$installed_plugin_reference" --json >/dev/null 2>&1 || :
-		codex plugin marketplace remove "$installed_marketplace_name" --json >/dev/null 2>&1 || :
-	fi
-	(cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --rollback) >/dev/null 2>&1 || return 1
-	if [ "$had_previous" = true ]; then
-		restored_marketplace_name=$(cd "$release" && "$bun" -e 'const value = await Bun.file(process.argv[1]).json(); if (typeof value.name !== "string" || !/^[a-zA-Z0-9_-]+$/.test(value.name)) process.exit(1); process.stdout.write(value.name);' "$marketplace/.claude-plugin/marketplace.json") || return 1
-		restored_plugin_reference="timesaver@$restored_marketplace_name"
-		if [ "$claude_present" = true ]; then (cd "$content_root" && claude plugin marketplace add "$marketplace" --scope user >/dev/null 2>&1 && claude plugin install "$restored_plugin_reference" --scope user >/dev/null 2>&1) || return 1; fi
-		if [ "$codex_present" = true ]; then (cd "$content_root" && codex plugin marketplace add "$marketplace" --json >/dev/null 2>&1 && codex plugin add "$restored_plugin_reference" --json >/dev/null 2>&1) || return 1; fi
-	fi
+ if [ "$claude_added" = true ]; then claude plugin uninstall "$installed_plugin_reference" --scope user >/dev/null 2>&1 || :; fi
+ if [ "$codex_added" = true ]; then codex plugin remove "$installed_plugin_reference" --json >/dev/null 2>&1 || :; fi
+ (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --rollback) >/dev/null 2>&1 || return 1
+ if [ "$had_previous" = true ]; then
+  for app in claude codex; do
+   if [ -s "$tmp/plugins-$app.json.restore" ]; then
+    prior_reference=$(cat "$tmp/plugins-$app.json.restore")
+    if [ "$app" = claude ]; then (cd "$content_root" && claude plugin marketplace add "$marketplace" --scope user >/dev/null 2>&1 && claude plugin install "$prior_reference" --scope user >/dev/null 2>&1) || return 1
+    else (cd "$content_root" && codex plugin marketplace add "$marketplace" --json >/dev/null 2>&1 && codex plugin add "$prior_reference" --json >/dev/null 2>&1) || return 1; fi
+   fi
+  done
+ fi
 }
 
-remove_old_registration
-
-if command -v claude >/dev/null 2>&1; then
-	if ! (cd "$content_root" && claude plugin marketplace add "$marketplace" --scope user >/dev/null 2>&1 && claude plugin install "$installed_plugin_reference" --scope user >/dev/null 2>&1); then rollback_registration; fail_as "$generic"; fi
-	registered=true
+if [ "$claude_present" = true ] && [ "$account_plugin" = false ]; then
+ if ! has_public_plugin claude; then
+  if ! ensure_public_marketplace claude; then rollback_registration; fail_as "$generic"; fi
+  if (cd "$release" && "$bun" -e 'const value = await Bun.file(process.argv[1]).json(); process.exit(value.some(row => row.id === "timesaver@mindy") ? 0 : 1);' "$tmp/plugins-claude.json"); then
+   if ! (cd "$content_root" && claude plugin update "$installed_plugin_reference" --scope user >/dev/null 2>&1); then rollback_registration; fail_as "$generic"; fi
+  elif ! (cd "$content_root" && claude plugin install "$installed_plugin_reference" --scope user >/dev/null 2>&1); then rollback_registration; fail_as "$generic"; fi
+  claude_added=true
+ fi
+ registered=true
 fi
-if command -v codex >/dev/null 2>&1; then
-	if ! (cd "$content_root" && codex plugin marketplace add "$marketplace" --json >/dev/null 2>&1 && codex plugin add "$installed_plugin_reference" --json >/dev/null 2>&1); then rollback_registration; fail_as "$generic"; fi
-	registered=true
+if [ "$codex_present" = true ]; then
+ if ! has_public_plugin codex; then
+  if ! ensure_public_marketplace codex || ! (cd "$content_root" && codex plugin add "$installed_plugin_reference" --json >/dev/null 2>&1); then rollback_registration; fail_as "$generic"; fi
+  codex_added=true
+ fi
+ registered=true
 fi
 if [ "$registered" != true ]; then rollback_registration; fail_as "$generic"; fi
+remove_private_copy || { rollback_registration; fail_as "$generic"; }
+remove_old_registration
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --finalize) >/dev/null 2>&1 || { rollback_registration; fail_as "$generic"; }
+if [ "$account_plugin" = true ]; then printf '%s\n' '{"stage":"chat-keeping"}' >"$state_root/setup-progress.json"; fi
 
 finished=true
 printf '%s\n' "Mindy TimeSaver is now in $content_root"
-print_how_it_works
+print_welcome

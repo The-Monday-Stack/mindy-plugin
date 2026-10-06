@@ -1,9 +1,10 @@
 {
   "name": "timesaver",
-  "version": "1.0.0",
-  "description": "Install Mindy TimeSaver with your access code.",
+  "displayName": "Mindy TimeSaver",
+  "description": "Mindy TimeSaver keeps your chats.",
+  "version": "1.1.0",
   "author": {
     "name": "Mindy TimeSaver"
   },
-  "displayName": "Mindy TimeSaver"
+  "icon": "./assets/mindy.png"
 }

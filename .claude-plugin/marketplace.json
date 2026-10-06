@@ -10,6 +10,10 @@
       "source": "./plugins/mindy"
     },
     {
+      "name": "timesaver-install",
+      "source": "./plugins/timesaver-install"
+    },
+    {
       "name": "timesaver",
       "source": "./plugins/timesaver"
     }
