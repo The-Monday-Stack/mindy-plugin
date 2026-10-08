@@ -1,6 +1,6 @@
 ---
 name: timesaver-reports-off
-description: Stop sending Mindy TimeSaver bug reports.
+description: Use /timesaver-reports-off to stop sending MINDY TimeSaver bug reports.
 ---
 
 Use commas, colons or full stops in every reply to the person. Never use an em dash, including in lists and save confirmations.

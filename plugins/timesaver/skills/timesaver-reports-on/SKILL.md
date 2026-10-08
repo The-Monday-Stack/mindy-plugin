@@ -1,6 +1,6 @@
 ---
 name: timesaver-reports-on
-description: Allow Mindy TimeSaver bug reports while saving is on.
+description: Use /timesaver-reports-on to allow MINDY TimeSaver bug reports while saving is on.
 ---
 
 Use commas, colons or full stops in every reply to the person. Never use an em dash, including in lists and save confirmations.

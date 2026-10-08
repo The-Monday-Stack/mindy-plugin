@@ -1,0 +1,10 @@
+{
+  "name": "mindy-timesaver-access",
+  "version": "1.1.1",
+  "description": "Set up MINDY TimeSaver with your access code.",
+  "author": {
+    "name": "MINDY TimeSaver"
+  },
+  "displayName": "MINDY TimeSaver Setup",
+  "icon": "./assets/mindy.png"
+}

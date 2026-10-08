@@ -1,10 +1,10 @@
 {
   "name": "timesaver",
-  "displayName": "Mindy TimeSaver",
-  "description": "Mindy TimeSaver keeps your chats.",
-  "version": "1.1.0",
+  "displayName": "MINDY TimeSaver",
+  "description": "MINDY TimeSaver keeps your chats.",
+  "version": "1.2.0",
   "author": {
-    "name": "Mindy TimeSaver"
+    "name": "MINDY TimeSaver"
   },
   "icon": "./assets/mindy.png"
 }

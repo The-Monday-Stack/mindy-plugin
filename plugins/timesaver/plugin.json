@@ -1,0 +1,19 @@
+{
+  "name": "timesaver",
+  "version": "1.2.0",
+  "description": "MINDY TimeSaver keeps your chats.",
+  "author": {
+    "name": "MINDY TimeSaver"
+  },
+  "extensions": {
+    "com.openai": {
+      "skills": "./skills/",
+      "hooks": "./hooks/hooks.json",
+      "interface": {
+        "displayName": "MINDY TimeSaver",
+        "logo": "./assets/mindy.png",
+        "composerIcon": "./assets/mindy.png"
+      }
+    }
+  }
+}

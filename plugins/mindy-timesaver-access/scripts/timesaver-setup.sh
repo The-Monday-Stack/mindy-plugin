@@ -1,20 +1,20 @@
 #!/bin/sh
 set -eu
 
-start='type /timesaver-install'
+start='type /install-mts'
 capital="$(printf '%s' "$start" | cut -c 1 | tr '[:lower:]' '[:upper:]')$(printf '%s' "$start" | cut -c 2-)"
-no_code="This needs your Mindy TimeSaver access code, which came in the message with your install steps. $capital, a space and your code, all on one line."
-not_issued="This is not a Mindy TimeSaver access code, so setup can't use it. Copy the code again in full from the message it came in, then $start with it."
-not_active="This Mindy TimeSaver access code is no longer active, so it can't download Mindy TimeSaver."
-different="This Mac already has a different Mindy TimeSaver access code saved, and Mindy TimeSaver uses one code per Mac. $capital with that earlier code."
+no_code="This needs your MINDY TimeSaver access code, which came in the message with your install steps. $capital, a space and your code, all on one line."
+not_issued="This is not a MINDY TimeSaver access code, so setup can't use it. Copy the code again in full from the message it came in, then $start with it."
+not_active="This MINDY TimeSaver access code is no longer active, so it can't download MINDY TimeSaver."
+different="This Mac already has a different MINDY TimeSaver access code saved, and MINDY TimeSaver uses one code per Mac. $capital with that earlier code."
 unsigned="The release check did not pass, so setup has not installed this download. $capital with your access code to try again."
-too_many="Too many tries from this internet connection in the last minute, so Mindy TimeSaver's download server is pausing for a moment. Wait a minute, then $start with your access code again."
-unreachable="Setup could not reach Mindy TimeSaver's download server. Check you are online, then $start with your access code again."
+too_many="Too many tries from this internet connection in the last minute, so MINDY TimeSaver's download server is pausing for a moment. Wait a minute, then $start with your access code again."
+unreachable="Setup could not reach MINDY TimeSaver's download server. Check you are online, then $start with your access code again."
 interrupted="Setup stopped because it was interrupted. $capital with your access code to start again."
 generic="This step did not finish. $capital with your access code to try again."
 
 print_welcome() {
- printf '%s\n' "Mindy TimeSaver (MTS) is ready. It works in whatever folder you open the app in, and everything goes into one memory. Start a session with /mindyload, and type /mindyend when you finish to save it. Nothing will be saved to your MTS unless you type /mindyend at the end of a session."
+ printf '%s\n' "MINDY TimeSaver (MTS) is ready. It works in whatever folder you open the app in, and everything goes into one memory. Start a session with /mindyload, and type /mindyend when you finish to save it. Nothing will be saved to your MTS unless you type /mindyend at the end of a session."
 }
 
 show_help() {
@@ -37,7 +37,7 @@ read_content_root() {
     if (state?.backup?.startsWith(root + "/install-state.json.previous-") && !state.backup.slice(root.length + 1).includes("/")) path = state.backup;
    }
    const state = path ? await Bun.file(path).json() : {};
-   process.stdout.write(typeof state.contentRoot === "string" ? state.contentRoot : process.env.HOME + "/timesaver-install");
+   process.stdout.write(typeof state.contentRoot === "string" ? state.contentRoot : process.env.HOME + "/timesaver");
   ' "$HOME/.timesaver")
  fi
 }
@@ -51,7 +51,7 @@ if [ "${1:-}" = "--setup-complete" ]; then rm -f "$HOME/.timesaver/setup-progres
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "help" ]; then show_help; exit 0; fi
 if [ "${1:-}" = "--folder-info" ]; then
  read_content_root
- printf '%s\n' "Your saves folder is $content_root. Mindy TimeSaver works with Claude or ChatGPT, with other AIs coming soon. They all read the same memories and build the same context, so you are not locked in to one company. This folder is yours, not any company's. You can move it anywhere, at any time, by asking me."
+ printf '%s\n' "Your saves folder is $content_root. MINDY TimeSaver works with Claude or ChatGPT, with other AIs coming soon. They all read the same memories and build the same context, so you are not locked in to one company. This folder is yours, not any company's. You can move it anywhere, at any time, by asking me."
  exit 0
 fi
 code=
@@ -62,18 +62,20 @@ if [ "$code" = "help" ]; then show_help; exit 0; fi
 # An unfinished setup retains its transaction until app registration succeeds.
 if [ -z "$code" ] && [ -f "$HOME/.timesaver/install-state.json" ] && [ ! -f "$HOME/.timesaver/install-transaction.json" ]; then
  read_content_root
- printf '%s\n' "Mindy TimeSaver is already installed in $content_root."
+ printf '%s\n' "MINDY TimeSaver is already installed in $content_root."
  show_help
  exit 0
 fi
 if [ -z "$code" ]; then printf '%s\n' "$no_code"; exit 0; fi
 
 tmp=
+chat_code_copy=
+chat_code_copy_ready=
 finished=false
-step='starting Mindy TimeSaver setup'
-cleanup() { [ -z "$tmp" ] || rm -rf "$tmp"; }
-on_signal() { trap - HUP INT TERM; finished=true; reason="Setup stopped while $step. $interrupted"; report_stop "$reason" || :; cleanup; printf '%s\n' "$reason"; exit 1; }
-on_exit() { status=$?; if [ "$status" != 0 ] && [ "$finished" = false ]; then report_stop "Setup stopped while $step. $generic" || :; fi; cleanup; if [ "$status" != 0 ] && [ "$finished" = false ]; then printf '%s\n' "Setup stopped while $step. $generic"; fi; }
+step='starting MINDY TimeSaver setup'
+cleanup() { if [ "${1:-0}" != 0 ] && [ -n "$chat_code_copy" ] && [ -f "$chat_code_copy_ready" ]; then rm -f "$chat_code_copy"; fi; [ -z "$tmp" ] || rm -rf "$tmp"; }
+on_signal() { trap - HUP INT TERM; finished=true; reason="Setup stopped while $step. $interrupted"; report_stop "$reason" || :; cleanup 1; printf '%s\n' "$reason"; exit 1; }
+on_exit() { status=$?; if [ "$status" != 0 ] && [ "$finished" = false ]; then report_stop "Setup stopped while $step. $generic" || :; fi; cleanup "$status"; if [ "$status" != 0 ] && [ "$finished" = false ]; then printf '%s\n' "Setup stopped while $step. $generic"; fi; }
 trap on_signal HUP INT TERM
 trap on_exit EXIT
 
@@ -92,7 +94,7 @@ report_stop() {
 	note="$stop_root/$report_id.txt"
 	if mkdir -p "$stop_root" 2>/dev/null; then
 		chmod 700 "$home/.timesaver" "$stop_root" 2>/dev/null || :
-		printf 'Mindy TimeSaver setup stop\nTime (UTC): %s\nStep: %s\nReason: %s\n' "$stamp" "$step" "$1" >"$note" 2>/dev/null || :
+		printf 'MINDY TimeSaver setup stop\nTime (UTC): %s\nStep: %s\nReason: %s\n' "$stamp" "$step" "$1" >"$note" 2>/dev/null || :
 		chmod 600 "$note" 2>/dev/null || :
 	fi
 	membership_number=${code%.*}
@@ -107,17 +109,17 @@ tmp=$(mktemp -d) || fail_as "$generic"
 plugin_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P) || fail_as "$generic"
 home=${HOME:-}
 [ -n "$home" ] || fail_as "$generic"
-step='checking this computer can run Mindy TimeSaver'
-[ "$(uname -s)" = Darwin ] || fail_as 'Setup needs to run on your Mac. Click the </> button, choose Local and run /timesaver-install there.'
+step='checking this computer can run MINDY TimeSaver'
+[ "$(uname -s)" = Darwin ] || fail_as 'Setup needs to run on your Mac. Click the </> button, choose Local and run /install-mts there.'
 step='finding your saves folder'
 read_content_root || fail_as "$generic"
 if [ -x "$home/.timesaver/bin/bun" ] && [ ! -f "$home/.timesaver/install-transaction.json" ] && { [ -f "$home/.timesaver/install-state.json" ] || [ -f "$home/.timesaver/kept-saves.json" ]; }; then
- [ -d "$content_root" ] || fail_as "Mindy TimeSaver cannot reach your saves folder at $content_root. Reconnect its disk or cloud folder, then try again. Your existing saves have not been changed."
+ [ -d "$content_root" ] || fail_as "MINDY TimeSaver cannot reach your saves folder at $content_root. Reconnect its disk or cloud folder, then try again. Your existing saves have not been changed."
 fi
 state_root="$home/.timesaver"
 
 packument="$tmp/packument.json"
-step="asking Mindy TimeSaver's download server for the latest release"
+step="asking MINDY TimeSaver's download server for the latest release"
 if status=$(gate_curl -sS -H 'Accept: application/json' -o "$packument" -w '%{http_code}' 'https://gate.mindy.build/mts' 2>/dev/null); then :; else fail_as "$unreachable"; fi
 case "$status" in
 	200) ;;
@@ -136,14 +138,14 @@ integrity=$(printf '%s\n' "$entry" | sed -n 's/.*"integrity"[[:space:]]*:[[:spac
 case "$integrity" in sha512-*) ;; *) fail_as "$unsigned" ;; esac
 
 archive="$tmp/mts.tgz"
-step='downloading the Mindy TimeSaver release'
+step='downloading the MINDY TimeSaver release'
 if status=$(gate_curl -sS -o "$archive" -w '%{http_code}' "https://gate.mindy.build/mts/-/mts-$version.tgz" 2>/dev/null); then :; else fail_as "$unreachable"; fi
 [ "$status" = 200 ] || fail_as "The download server did not send the release (response $status). Try setup again."
 step='checking the downloaded file matches the release'
 actual=$(shasum -a 512 "$archive" 2>/dev/null | sed 's/[[:space:]].*$//')
 expected=$(printf '%s\n' "${integrity#sha512-}" | openssl base64 -d -A 2>/dev/null | od -An -tx1 | tr -d ' \n')
 [ -n "$actual" ] && [ "$actual" = "$expected" ] || fail_as "$unsigned"
-step='checking the download is a signed Mindy TimeSaver release'
+step='checking the download is a signed MINDY TimeSaver release'
 entries="$tmp/archive-entries"
 details="$tmp/archive-details"
 [ "$(wc -c <"$archive" | tr -d ' ')" -le 262144000 ] || fail_as "$unsigned"
@@ -205,29 +207,56 @@ lock_module="$release/components/mts-engine/MY-MIND/MY-SYSTEM/utilities/mts-file
 step='finding your saves folder'
 read_content_root "$bun" || fail_as "$generic"
 if [ ! -f "$state_root/install-transaction.json" ] && { [ -f "$state_root/install-state.json" ] || [ -f "$state_root/kept-saves.json" ]; }; then
- [ -d "$content_root" ] || fail_as "Mindy TimeSaver cannot reach your saves folder at $content_root. Reconnect its disk or cloud folder, then try again. Your existing saves have not been changed."
+ [ -d "$content_root" ] || fail_as "MINDY TimeSaver cannot reach your saves folder at $content_root. Reconnect its disk or cloud folder, then try again. Your existing saves have not been changed."
 fi
 step='checking the files inside the release'
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --verify-only) >/dev/null 2>&1 || fail_as "$unsigned"
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --rollback-if-present) >/dev/null 2>&1 || fail_as "$generic"
 save_code="$release/components/mts-engine/mts-install/runtime/save-access-code.ts"
 save_error="$tmp/save-code-error"
-step='saving the Mindy TimeSaver access code on this Mac'
+step='saving the MINDY TimeSaver access code on this Mac'
 if printf '%s\n' "$code" | (cd "$release" && HOME="$home" "$bun" "$save_code") >/dev/null 2>"$save_error"; then :
-elif grep -q '^This Mac already has a different Mindy TimeSaver access code\.$' "$save_error"; then fail_as "$different"
+elif grep -q '^This Mac already has a different MINDY TimeSaver access code\.$' "$save_error"; then fail_as "$different"
 else fail_as "$generic"
 fi
 install_result="$tmp/install.json"
-step='installing Mindy TimeSaver'
+step='installing MINDY TimeSaver'
 had_previous=false
 [ ! -f "$state_root/install-state.json" ] || had_previous=true
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --prepare) >"$install_result" 2>/dev/null || fail_as "$generic"
+
+# Chat runs on Anthropic's machine. Its connected folder supplies this code copy.
+# Keep the code on stdin, and keep the copy private beside the saving setting.
+chat_code_copy="$content_root/.timesaver/timesaver-access-code"
+chat_code_copy_ready="$tmp/chat-code-copy-ready"
+if printf '%s' "$code" | (cd "$release" && "$bun" -e '
+ const fs = require("node:fs"), path = require("node:path");
+ const folder = path.join(process.argv[1], ".timesaver");
+ const info = fs.lstatSync(folder);
+ if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid()) process.exit(1);
+ fs.chmodSync(folder, 0o700);
+ const searches = path.join(folder, "search-commands");
+ fs.mkdirSync(searches, { recursive: true, mode: 0o700 });
+ const searchesInfo = fs.lstatSync(searches);
+ if (!searchesInfo.isDirectory() || searchesInfo.isSymbolicLink() || searchesInfo.uid !== process.getuid()) process.exit(1);
+ fs.chmodSync(searches, 0o700);
+ const target = path.join(folder, "timesaver-access-code");
+ if (fs.existsSync(target)) {
+  const old = fs.lstatSync(target);
+  if (!old.isFile() || old.isSymbolicLink() || old.nlink !== 1 || old.uid !== process.getuid()) process.exit(1);
+ }
+ const code = await Bun.stdin.text();
+ const fd = fs.openSync(target, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW, 0o600);
+ try { fs.fchmodSync(fd, 0o600); fs.writeFileSync(process.argv[2], "ready", { mode: 0o600 }); fs.writeFileSync(fd, code); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+' "$content_root" "$chat_code_copy_ready") >/dev/null 2>&1; then :
+else (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --rollback-if-present) >/dev/null 2>&1 || :; fail_as "$generic"
+fi
 
 marketplace="$state_root/plugin-marketplace"
 installed_marketplace_name='mindy'
 installed_plugin_reference='timesaver@mindy'
 registered=$account_plugin
-step='making Mindy TimeSaver available in your apps'
+step='making MINDY TimeSaver available in your apps'
 claude_present=false
 codex_present=false
 if command -v claude >/dev/null 2>&1; then claude_present=true; fi
@@ -356,9 +385,16 @@ fi
 if [ "$registered" != true ]; then rollback_registration; fail_as "$generic"; fi
 remove_private_copy || { rollback_registration; fail_as "$generic"; }
 remove_old_registration
+if [ "$had_previous" = false ]; then
+ (cd "$content_root" && HOME="$home" MTS_STATE_ROOT="$state_root" "$bun" timesaver-install/runtime/privacy.ts reports-on) >/dev/null 2>&1 || { rollback_registration; fail_as "$generic"; }
+fi
 (cd "$release" && HOME="$home" "$bun" "$installer" "$release" "$content_root" "$state_root" --finalize) >/dev/null 2>&1 || { rollback_registration; fail_as "$generic"; }
 if [ "$account_plugin" = true ]; then printf '%s\n' '{"stage":"chat-keeping"}' >"$state_root/setup-progress.json"; fi
 
 finished=true
-printf '%s\n' "Mindy TimeSaver is now in $content_root"
-print_welcome
+printf '%s\n' "MINDY TimeSaver is now in $content_root"
+if [ "${account_plugin:-false}" = true ]; then
+ printf '%s\n' "Switch the mode at the bottom of the window back to Auto. Open Customize, then Plugins, and add MINDY TimeSaver from mindy-plugin. The next step needs a new session: start one and type /install-mts to continue."
+else
+ print_welcome
+fi

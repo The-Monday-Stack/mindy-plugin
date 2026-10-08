@@ -10,12 +10,13 @@
       "source": "./plugins/mindy"
     },
     {
-      "name": "timesaver-install",
-      "source": "./plugins/timesaver-install"
+      "name": "mindy-timesaver-access",
+      "source": "./plugins/mindy-timesaver-access"
     },
     {
       "name": "timesaver",
-      "source": "./plugins/timesaver"
+      "source": "./plugins/timesaver",
+      "displayName": "MINDY TimeSaver"
     }
   ]
 }

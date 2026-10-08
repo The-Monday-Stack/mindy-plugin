@@ -1,14 +1,14 @@
 {
   "name": "timesaver",
-  "description": "Mindy TimeSaver keeps your chats.",
-  "version": "1.1.0",
+  "description": "MINDY TimeSaver keeps your chats.",
+  "version": "1.2.0",
   "author": {
-    "name": "Mindy TimeSaver"
+    "name": "MINDY TimeSaver"
   },
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
   "interface": {
-    "displayName": "Mindy TimeSaver",
+    "displayName": "MINDY TimeSaver",
     "logo": "./assets/mindy.png",
     "composerIcon": "./assets/mindy.png"
   }
